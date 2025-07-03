@@ -57,7 +57,7 @@ docker-compose up -d
 
 1. Clone the repository:
 ```bash
-git clone https://github.com/YOUR_USERNAME/karakeep-companion.git
+git clone https://github.com/codejawn/karakeep-companion.git
 cd karakeep-companion
 ```
 
@@ -94,58 +94,6 @@ The application uses a `config/config.json` file for settings. If it doesn't exi
 | `karakeepUrl` | URL to your KaraKeep instance | `http://localhost:3000` |
 | `bookmarkTarget` | Where to open bookmarks: `_self` (same tab) or `_blank` (new tab) | `_self` |
 | `preferences.columnOrder` | Saved order of bookmark lists (managed automatically) | `[]` |
-
-## Building Your Own Docker Image
-
-### Automatic Build with GitHub Actions
-
-1. Fork this repository
-2. Go to Settings → Actions → General
-3. Under "Workflow permissions", select "Read and write permissions"
-4. Enable GitHub Actions in your fork
-5. Push to the `main` branch or create a tag (e.g., `v1.0.0`)
-6. The image will be automatically built and published to GitHub Container Registry
-
-### Manual Build
-
-```bash
-# Build the image
-docker build -t karakeep-companion .
-
-# Tag for GitHub Container Registry
-docker tag karakeep-companion ghcr.io/YOUR_GITHUB_USERNAME/karakeep-companion:latest
-
-# Login to GitHub Container Registry
-echo $GITHUB_TOKEN | docker login ghcr.io -u YOUR_GITHUB_USERNAME --password-stdin
-
-# Push the image
-docker push ghcr.io/YOUR_GITHUB_USERNAME/karakeep-companion:latest
-```
-
-To use your custom image, update the docker-compose.yml:
-```yaml
-image: ghcr.io/YOUR_GITHUB_USERNAME/karakeep-companion:latest
-```
-
-## Project Structure
-
-```
-karakeep-companion/
-├── index.html             # Main HTML file
-├── styles.css             # Styling
-├── app.js                 # Application logic
-├── server.py              # Python web server
-├── config/                # Configuration directory (created automatically)
-│   └── config.json        # User preferences
-├── Dockerfile             # Docker build instructions
-├── docker-compose.yml     # Docker Compose example
-├── .dockerignore          # Docker ignore file
-├── .github/               # GitHub Actions
-│   └── workflows/
-│       └── docker-publish.yml
-├── mockup.html            # Screenshot generator
-└── README.md              # This file
-```
 
 ## Development
 
@@ -202,10 +150,9 @@ Contributions are welcome! Please feel free to submit a Pull Request.
 
 ## License
 
-This project is licensed under the MIT License - see the LICENSE file for details.
+This project is licensed under the GNU V3 license - see the LICENSE file for details.
 
 ## Acknowledgments
 
-- Built to complement [KaraKeep](https://github.com/karakeep-app/karakeep)
+- Built to complement the amazing [KaraKeep](https://github.com/karakeep-app/karakeep)
 - Uses [SQLite WASM](https://sqlite.org/wasm/doc/trunk/index.md) for browser-based database access
-- Inspired by modern bookmark managers and Pinterest's masonry layout
