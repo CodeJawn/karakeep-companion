@@ -1,6 +1,6 @@
 # KaraKeep Companion
 
-A beautiful, fast, and intuitive web interface for browsing your [KaraKeep](https://github.com/karakeep-app/karakeep) bookmarks. Features a masonry layout, drag-and-drop organization, and real-time search.
+A more compact view for browsing your [KaraKeep](https://github.com/karakeep-app/karakeep) bookmarks. All Karakeep bookmarks are shown on one single page, organized by lists.  
 
 ![KaraKeep Companion Screenshot](screenshot.png)
 
@@ -9,7 +9,6 @@ A beautiful, fast, and intuitive web interface for browsing your [KaraKeep](http
 - 📚 **Masonry Layout** - Efficient use of screen space with Pinterest-style columns
 - 🔍 **Real-time Search** - Instantly filter bookmarks as you type
 - 🖱️ **Drag & Drop** - Reorder lists to your preference
-- 🎨 **Dark Mode** - Automatic theme switching based on system preferences
 - 📱 **Responsive** - Works beautifully on desktop, tablet, and mobile
 - 🚀 **Fast** - SQLite WASM runs entirely in your browser
 - 🔒 **Privacy-First** - Your data never leaves your device
