@@ -1,0 +1,19 @@
+version: '3.8'
+
+services:
+  karakeep-companion:
+    image: ghcr.io/YOUR_GITHUB_USERNAME/karakeep-companion:latest
+    container_name: karakeep-companion
+    ports:
+      - "8000:8000"
+    volumes:
+      # Mount the KaraKeep database (read-only)
+      - /path/to/karakeep/db.db:/app/db.db:ro
+      # Mount config directory for persistence
+      - ./config:/app/config
+    restart: unless-stopped
+
+# Example paths:
+# Linux: /home/user/.local/share/karakeep/db.db
+# macOS: /Users/user/Library/Application Support/karakeep/db.db
+# Docker: /var/lib/docker/volumes/karakeep_data/_data/db.db

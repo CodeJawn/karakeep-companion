@@ -1,9 +1,11 @@
 // KaraKeep Companion App
-// Main application logic
+// Main application logic with drag-and-drop support
 
 // Global state
 let db = null;
 let bookmarksData = [];
+let config = null;
+let rootLists = [];
 
 // SQLite WASM CDN URL
 const SQLITE_WASM_URL = 'https://cdn.jsdelivr.net/npm/@sqlite.org/sqlite-wasm@3.45.1-build1/sqlite-wasm/jswasm/sqlite3.mjs';
@@ -11,10 +13,56 @@ const SQLITE_WASM_URL = 'https://cdn.jsdelivr.net/npm/@sqlite.org/sqlite-wasm@3.
 // Initialize the application
 async function init() {
     try {
+        // Load configuration
+        await loadConfig();
+        
+        // Initialize SQLite and load bookmarks
         await initSQLite();
+        
     } catch (error) {
         console.error('Failed to initialize application:', error);
         showError('Failed to initialize application', error.message);
+    }
+}
+
+// Load configuration file
+async function loadConfig() {
+    try {
+        const response = await fetch('./config.json');
+        if (response.ok) {
+            config = await response.json();
+            
+            // Set KaraKeep link
+            const karakeepLink = document.getElementById('karakeepLink');
+            if (karakeepLink && config.karakeepUrl) {
+                karakeepLink.href = config.karakeepUrl;
+            }
+        } else {
+            // Use defaults if config not found
+            config = {
+                karakeepUrl: 'http://localhost:3000',
+                bookmarkTarget: '_self',
+                preferences: {
+                    columnOrder: []
+                }
+            };
+        }
+        
+        // Load saved preferences from localStorage
+        loadSavedPreferences();
+        
+    } catch (error) {
+        console.warn('Could not load config.json, using defaults:', error);
+        config = {
+            karakeepUrl: 'http://localhost:3000',
+            bookmarkTarget: '_self',
+            preferences: {
+                columnOrder: []
+            }
+        };
+        
+        // Load saved preferences from localStorage
+        loadSavedPreferences();
     }
 }
 
@@ -121,10 +169,29 @@ async function loadBookmarks() {
         });
 
         // Get root lists (no parent)
-        const rootLists = lists
+        rootLists = lists
             .filter(list => !list.parentId)
             .map(list => listsById[list.id])
             .filter(list => list.bookmarks.length > 0 || hasBookmarksInChildren(list));
+
+        // Apply saved column order
+        if (config.preferences.columnOrder && config.preferences.columnOrder.length > 0) {
+            const orderedLists = [];
+            const listMap = new Map(rootLists.map(list => [list.id, list]));
+            
+            // Add lists in saved order
+            config.preferences.columnOrder.forEach(id => {
+                if (listMap.has(id)) {
+                    orderedLists.push(listMap.get(id));
+                    listMap.delete(id);
+                }
+            });
+            
+            // Add any remaining lists not in saved order
+            listMap.forEach(list => orderedLists.push(list));
+            
+            rootLists = orderedLists;
+        }
 
         // Render the interface
         renderLists(rootLists);
@@ -146,17 +213,18 @@ function renderLists(lists) {
     const content = document.getElementById('content');
     content.innerHTML = `
         <div class="lists-grid" id="listsContainer">
-            ${lists.map(list => renderList(list)).join('')}
+            ${lists.map((list, index) => renderList(list, 0, index)).join('')}
         </div>
     `;
 
     // Setup event listeners
     setupSearch();
     setupFaviconErrorHandling();
+    setupDragAndDrop();
 }
 
 // Render a single list with its children
-function renderList(list, level = 0) {
+function renderList(list, level = 0, index = 0) {
     // Skip empty lists
     if (list.bookmarks.length === 0 && !hasBookmarksInChildren(list)) {
         return '';
@@ -164,9 +232,11 @@ function renderList(list, level = 0) {
     
     const listClass = level === 0 ? 'list-section' : `nested-list-${level}`;
     const headingLevel = Math.min(level + 2, 6); // h2 to h6
+    const draggableAttr = level === 0 ? 'draggable="true"' : '';
+    const dataIndex = level === 0 ? `data-index="${index}"` : '';
     
     return `
-        <div class="${listClass}" data-list-id="${escapeHtml(list.id)}">
+        <div class="${listClass}" data-list-id="${escapeHtml(list.id)}" ${draggableAttr} ${dataIndex}>
             <div class="list-header">
                 <span class="list-icon">${escapeHtml(list.icon)}</span>
                 <h${headingLevel} class="list-title">${escapeHtml(list.name)}</h${headingLevel}>
@@ -187,13 +257,13 @@ function renderList(list, level = 0) {
 // Render a single bookmark
 function renderBookmark(bookmark) {
     const faviconUrl = bookmark.favicon || `https://www.google.com/s2/favicons?domain=${new URL(bookmark.url).hostname}`;
+    const target = config.bookmarkTarget === '_blank' ? 'target="_blank" rel="noopener noreferrer"' : '';
     
     return `
         <a href="${escapeHtml(bookmark.url)}" 
            class="bookmark-item" 
            title="${escapeHtml(bookmark.title || bookmark.url)}"
-           target="_blank"
-           rel="noopener noreferrer">
+           ${target}>
             <img src="${escapeHtml(faviconUrl)}" 
                  alt="" 
                  class="bookmark-favicon" 
@@ -201,6 +271,115 @@ function renderBookmark(bookmark) {
             <span class="bookmark-title">${escapeHtml(bookmark.title || 'Untitled')}</span>
         </a>
     `;
+}
+
+// Setup drag and drop functionality
+function setupDragAndDrop() {
+    const listSections = document.querySelectorAll('.list-section[draggable="true"]');
+    let draggedElement = null;
+    let draggedIndex = null;
+
+    listSections.forEach(section => {
+        section.addEventListener('dragstart', handleDragStart);
+        section.addEventListener('dragover', handleDragOver);
+        section.addEventListener('drop', handleDrop);
+        section.addEventListener('dragend', handleDragEnd);
+        section.addEventListener('dragenter', handleDragEnter);
+        section.addEventListener('dragleave', handleDragLeave);
+    });
+
+    function handleDragStart(e) {
+        draggedElement = this;
+        draggedIndex = parseInt(this.dataset.index);
+        this.classList.add('dragging');
+        e.dataTransfer.effectAllowed = 'move';
+        e.dataTransfer.setData('text/html', this.innerHTML);
+    }
+
+    function handleDragOver(e) {
+        if (e.preventDefault) {
+            e.preventDefault();
+        }
+        e.dataTransfer.dropEffect = 'move';
+        return false;
+    }
+
+    function handleDragEnter(e) {
+        if (this !== draggedElement && this.classList.contains('list-section')) {
+            this.classList.add('drag-over');
+        }
+    }
+
+    function handleDragLeave(e) {
+        if (this !== draggedElement && this.classList.contains('list-section')) {
+            this.classList.remove('drag-over');
+        }
+    }
+
+    function handleDrop(e) {
+        if (e.stopPropagation) {
+            e.stopPropagation();
+        }
+
+        if (draggedElement !== this && this.classList.contains('list-section')) {
+            const targetIndex = parseInt(this.dataset.index);
+            
+            // Reorder the rootLists array
+            const draggedList = rootLists[draggedIndex];
+            rootLists.splice(draggedIndex, 1);
+            
+            // Adjust target index if needed
+            const adjustedIndex = draggedIndex < targetIndex ? targetIndex - 1 : targetIndex;
+            rootLists.splice(adjustedIndex, 0, draggedList);
+            
+            // Re-render the lists
+            renderLists(rootLists);
+            
+            // Save the new order
+            saveColumnOrder();
+        }
+
+        return false;
+    }
+
+    function handleDragEnd(e) {
+        const listSections = document.querySelectorAll('.list-section');
+        listSections.forEach(section => {
+            section.classList.remove('dragging', 'drag-over');
+        });
+    }
+}
+
+// Save column order to localStorage (as we can't write to files from browser)
+async function saveColumnOrder() {
+    const order = rootLists.map(list => list.id);
+    
+    // Save to localStorage as fallback
+    localStorage.setItem('karakeep-column-order', JSON.stringify(order));
+    
+    // Update config object
+    config.preferences.columnOrder = order;
+    
+    // Try to save to server if available
+    try {
+        const response = await fetch('/api/preferences', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify(config.preferences)
+        });
+        
+        if (response.ok) {
+            console.log('Preferences saved to server');
+        } else {
+            console.log('Server save failed, using localStorage only');
+        }
+    } catch (error) {
+        console.log('No server available, using localStorage only');
+    }
+    
+    console.log('Column order saved:', order);
 }
 
 // Setup search functionality
@@ -257,6 +436,21 @@ function setupFaviconErrorHandling() {
             this.style.display = 'none';
         });
     });
+}
+
+// Load saved preferences from localStorage on startup
+function loadSavedPreferences() {
+    const savedOrder = localStorage.getItem('karakeep-column-order');
+    if (savedOrder) {
+        try {
+            const order = JSON.parse(savedOrder);
+            if (Array.isArray(order)) {
+                config.preferences.columnOrder = order;
+            }
+        } catch (error) {
+            console.error('Error loading saved preferences:', error);
+        }
+    }
 }
 
 // Utility functions
