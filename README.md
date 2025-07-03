@@ -28,7 +28,7 @@ version: '3.8'
 
 services:
   karakeep-companion:
-    image: ghcr.io/YOUR_USERNAME/karakeep-companion:latest
+    image: ghcr.io/codejawn/karakeep-companion:latest
     container_name: karakeep-companion
     ports:
       - "8000:8000"
