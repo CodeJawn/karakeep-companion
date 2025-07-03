@@ -1,6 +1,6 @@
 # KaraKeep Companion
 
-A more compact view for browsing your [KaraKeep](https://github.com/karakeep-app/karakeep) bookmarks. All Karakeep bookmarks are shown on one single page, organized by lists.  
+A more compact view for browsing your [KaraKeep](https://github.com/karakeep-app/karakeep) bookmarks. All Karakeep bookmarks are shown on one single page, organized by lists.  This is meant to be a very simple and uncluttered interface to your bookmarks, all bookmark management capabilities are done through the full KaraKeep app.  
 
 ![KaraKeep Companion Screenshot](screenshot.png)
 
