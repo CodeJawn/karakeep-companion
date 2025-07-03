@@ -1,0 +1,34 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="description" content="KaraKeep Bookmarks Companion">
+    <title>KaraKeep Bookmarks</title>
+    <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+    <div class="container">
+        <header class="header">
+            <h1>KaraKeep Bookmarks</h1>
+            <div class="search-bar">
+                <input 
+                    type="text" 
+                    id="searchInput" 
+                    placeholder="Search bookmarks..." 
+                    aria-label="Search bookmarks"
+                />
+            </div>
+        </header>
+
+        <main id="content">
+            <div class="loading">
+                <div class="spinner"></div>
+                <p>Loading database...</p>
+            </div>
+        </main>
+    </div>
+
+    <script type="module" src="app.js"></script>
+</body>
+</html>
