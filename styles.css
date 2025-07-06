@@ -482,3 +482,76 @@ input:focus-visible {
     position: absolute;
     visibility: hidden;
 }
+
+.refresh-button {
+    background: var(--bg-secondary);
+    border: 1px solid var(--border-color);
+    border-radius: var(--radius-md);
+    padding: 0.5rem 1rem;
+    font-size: 0.875rem;
+    cursor: pointer;
+    transition: all var(--transition-fast);
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    margin-left: auto;
+}
+
+.refresh-button:hover:not(:disabled) {
+    background: var(--bg-hover);
+    transform: translateY(-1px);
+}
+
+.refresh-button:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+}
+
+/* Update header to accommodate refresh button */
+.header {
+    display: flex;
+    align-items: center;
+    gap: 1rem;
+}
+
+.header h1 {
+    margin: 0;
+}
+
+/* Loading states */
+.loading {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    min-height: 50vh;
+    text-align: center;
+}
+
+.loading .spinner {
+    width: 48px;
+    height: 48px;
+    border: 4px solid var(--border-color);
+    border-top-color: var(--primary-color);
+    border-radius: 50%;
+    animation: spin 1s linear infinite;
+}
+
+@keyframes spin {
+    to { transform: rotate(360deg); }
+}
+
+/* Error state styling */
+.error {
+    background: rgba(255, 0, 0, 0.1);
+    border: 1px solid rgba(255, 0, 0, 0.3);
+    border-radius: var(--radius-md);
+    padding: 2rem;
+    margin: 2rem;
+    text-align: center;
+}
+
+.error h2 {
+    color: #dc2626;
+    margin-bottom: 1rem;
+}
