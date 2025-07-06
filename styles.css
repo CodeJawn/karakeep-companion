@@ -185,28 +185,29 @@ body {
     color: var(--text-secondary);
 }
 
-/* Masonry grid layout */
-.lists-grid {
-    column-count: 4;
-    column-gap: var(--spacing-xl);
+/* MODIFIED: Replaced column-count with a Flexbox grid system */
+.grid-container {
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--spacing-xl);
+    align-items: flex-start;
 }
 
-@media (max-width: 1200px) {
-    .lists-grid {
-        column-count: 3;
-    }
+.grid-column {
+    flex: 1;
+    min-width: 280px; /* Adjust as needed */
+    display: flex;
+    flex-direction: column;
+    gap: var(--spacing-xl);
+    min-height: 200px; /* Ensures empty columns are a valid drop target */
+    padding: 2px; /* Helps with drop detection */
+    border-radius: var(--radius-lg);
+    transition: background-color var(--transition-fast);
 }
 
-@media (max-width: 900px) {
-    .lists-grid {
-        column-count: 2;
-    }
-}
-
-@media (max-width: 600px) {
-    .lists-grid {
-        column-count: 1;
-    }
+/* Add a visual indicator to columns when dragging over them */
+.grid-column.drag-over-column {
+    background-color: var(--accent-focus);
 }
 
 /* List sections */
@@ -216,16 +217,12 @@ body {
     padding: var(--spacing-lg);
     box-shadow: var(--shadow-sm);
     transition: transform var(--transition-fast), box-shadow var(--transition-fast);
-    break-inside: avoid;
-    margin-bottom: var(--spacing-xl);
+    /* `break-inside: avoid` is no longer needed */
     position: relative;
-}
-
-.list-section[draggable="true"] {
     cursor: grab;
 }
 
-.list-section[draggable="true"]:active {
+.list-section:active {
     cursor: grabbing;
 }
 
@@ -234,13 +231,15 @@ body {
     box-shadow: var(--shadow-md);
 }
 
-.list-section.dragging {
-    opacity: 0.5;
-    cursor: grabbing;
+.sortable-ghost {
+    background: var(--bg-secondary);
+    border: 2px dashed var(--accent-primary);
+    opacity: 0.6;
 }
 
-.list-section.drag-over {
-    box-shadow: 0 0 0 2px var(--accent-primary);
+.sortable-drag {
+    opacity: 0.8;
+    transform: rotate(2deg);
 }
 
 /* List header */
@@ -314,7 +313,7 @@ body {
     padding: var(--spacing-md);
     position: relative;
     margin-left: var(--spacing-sm);
-    break-inside: avoid;
+    /* `break-inside: avoid` is no longer needed */
 }
 
 .nested-list-1::before {
@@ -362,7 +361,7 @@ body {
     padding: var(--spacing-md);
     position: relative;
     margin-left: var(--spacing-sm);
-    break-inside: avoid;
+    /* `break-inside: avoid` is no longer needed */
 }
 
 .nested-list-2::before {
@@ -405,6 +404,9 @@ body {
 @media (max-width: 768px) {
     body {
         padding: var(--spacing-md);
+    }
+    .grid-container {
+        flex-direction: column;
     }
 
     .header h1 {
