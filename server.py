@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Simple server for KaraKeep Companion with preference persistence
+Simple server for KaraKeep Homedash with preference persistence
 This is optional - you can use any static file server if you don't need
 cross-device preference syncing.
 """
@@ -97,11 +97,11 @@ if __name__ == '__main__':
     # Ensure config exists before starting server
     ensure_config_exists()
     
-    port = 8000
+    port = 8595
     server_address = ('', port)
     httpd = HTTPServer(server_address, KaraKeepHandler)
     
-    print(f"KaraKeep Companion Server running on http://localhost:{port}")
+    print(f"KaraKeep HomeDash Server running on http://localhost:{port}")
     print("Press Ctrl+C to stop")
     
     try:

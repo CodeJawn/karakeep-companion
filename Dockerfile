@@ -13,7 +13,7 @@ COPY server.py .
 RUN mkdir -p config
 
 # Expose port
-EXPOSE 8000
+EXPOSE 8595
 
 # Run the server
 CMD ["python", "server.py"]

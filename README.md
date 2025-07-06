@@ -1,8 +1,8 @@
-# KaraKeep Companion
+# KaraKeep HomeDash
 
-A more compact view for browsing your [KaraKeep](https://github.com/karakeep-app/karakeep) bookmarks. All Karakeep bookmarks are shown on one single page, organized by lists.  This is meant to be a very simple and uncluttered interface to your bookmarks, all bookmark management capabilities are done through the full KaraKeep app.  
+A more compact home page dashboard style view for browsing your [KaraKeep](https://github.com/karakeep-app/karakeep) bookmarks. All Karakeep bookmarks are shown on one single page, organized by lists.  This is meant to be a very simple and uncluttered dashboard to your bookmarks, all bookmark management capabilities are done through the full (and awesome) KaraKeep app.  
 
-![KaraKeep Companion Screenshot](screenshot.png)
+![KaraKeep HomeDash Screenshot](screenshot.png)
 
 ## Features
 
@@ -27,11 +27,11 @@ A more compact view for browsing your [KaraKeep](https://github.com/karakeep-app
 version: '3.8'
 
 services:
-  karakeep-companion:
-    image: ghcr.io/codejawn/karakeep-companion:latest
-    container_name: karakeep-companion
+  karakeep-homedash:
+    image: ghcr.io/codejawn/karakeep-homedash:latest
+    container_name: karakeep-homedash
     ports:
-      - "8000:8000"
+      - "8595:8595"
     volumes:
       # Update path to your KaraKeep database
       - /path/to/karakeep/db.db:/app/db.db:ro
@@ -45,7 +45,7 @@ services:
 docker-compose up -d
 ```
 
-3. Open http://localhost:8000 in your browser
+3. Open http://localhost:8595 in your browser
 
 ## Manual Installation
 
@@ -57,8 +57,8 @@ docker-compose up -d
 
 1. Clone the repository:
 ```bash
-git clone https://github.com/codejawn/karakeep-companion.git
-cd karakeep-companion
+git clone https://github.com/codejawn/karakeep-homedash.git
+cd karakeep-homedash
 ```
 
 2. Copy your KaraKeep database:
@@ -71,7 +71,7 @@ cp /path/to/karakeep/db.db .
 python server.py
 ```
 
-4. Open http://localhost:8000 in your browser
+4. Open http://localhost:8595 in your browser
 
 ## Configuration
 
@@ -108,7 +108,7 @@ For development without Docker:
 python server.py
 
 # Or use any static file server if you don't need preference persistence
-python -m http.server 8000
+python -m http.server 8595
 ```
 
 ### Making Changes

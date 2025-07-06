@@ -1,11 +1,11 @@
 version: '3.8'
 
 services:
-  karakeep-companion:
-    image: ghcr.io/codejawn/karakeep-companion:latest
-    container_name: karakeep-companion
+  karakeep-homedash:
+    image: ghcr.io/codejawn/karakeep-homedash:latest
+    container_name: karakeep-homedash
     ports:
-      - "8000:8000"
+      - "8595:8595"
     volumes:
       # Mount the KaraKeep database (read-only)
       - /path/to/karakeep/db.db:/app/db.db:ro

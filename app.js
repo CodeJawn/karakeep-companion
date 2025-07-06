@@ -1,4 +1,4 @@
-// KaraKeep Companion App
+// KaraKeep HomeDash App
 // Main application logic with drag-and-drop support
 
 // Global state
@@ -32,13 +32,31 @@ async function loadConfig() {
             if (karakeepLink && config.karakeepUrl) {
                 karakeepLink.href = config.karakeepUrl;
             }
+            
+            // Initialize preferences if not present
+            if (!config.preferences) {
+                config.preferences = { columnOrder: [], columnLayout: {} };
+            }
+            
+            // Don't load from localStorage if we have server config
+            console.log('Loaded config from server');
         } else {
-            config = { karakeepUrl: 'http://localhost:3000', bookmarkTarget: '_self', preferences: { columnOrder: [] } };
+            config = { 
+                karakeepUrl: 'http://localhost:3000', 
+                bookmarkTarget: '_self', 
+                preferences: { columnOrder: [], columnLayout: {} } 
+            };
+            // Only load from localStorage if server config is not available
+            loadSavedPreferences();
         }
-        loadSavedPreferences();
     } catch (error) {
         console.warn('Could not load config.json, using defaults:', error);
-        config = { karakeepUrl: 'http://localhost:3000', bookmarkTarget: '_self', preferences: { columnOrder: [] } };
+        config = { 
+            karakeepUrl: 'http://localhost:3000', 
+            bookmarkTarget: '_self', 
+            preferences: { columnOrder: [], columnLayout: {} } 
+        };
+        // Only load from localStorage if server config is not available
         loadSavedPreferences();
     }
 }
@@ -116,10 +134,53 @@ function renderLists(lists) {
     // Create an array of arrays to hold the cards for each column
     const columns = Array.from({ length: NUM_COLUMNS }, () => []);
     
-    // Distribute the lists into the columns
-    lists.forEach((list, index) => {
-        columns[index % NUM_COLUMNS].push(list);
-    });
+    // Check if we have saved column layout
+    if (config.preferences.columnLayout) {
+        // Use saved column layout
+        const listMap = new Map(lists.map(list => [list.id, list]));
+        
+        for (let colIndex = 0; colIndex < NUM_COLUMNS; colIndex++) {
+            const columnIds = config.preferences.columnLayout[colIndex] || [];
+            columnIds.forEach(id => {
+                const list = listMap.get(id);
+                if (list) {
+                    columns[colIndex].push(list);
+                    listMap.delete(id);
+                }
+            });
+        }
+        
+        // Add any remaining lists (new ones not in saved layout) to first available column
+        let colIndex = 0;
+        listMap.forEach(list => {
+            columns[colIndex % NUM_COLUMNS].push(list);
+            colIndex++;
+        });
+    } else {
+        // Fallback to legacy columnOrder or default distribution
+        if (config.preferences.columnOrder && config.preferences.columnOrder.length > 0) {
+            // Use old columnOrder format - distribute evenly
+            const orderedLists = [];
+            const listMap = new Map(lists.map(list => [list.id, list]));
+            config.preferences.columnOrder.forEach(id => {
+                if (listMap.has(id)) {
+                    orderedLists.push(listMap.get(id));
+                    listMap.delete(id);
+                }
+            });
+            listMap.forEach(list => orderedLists.push(list));
+            
+            // Distribute ordered lists across columns
+            orderedLists.forEach((list, index) => {
+                columns[index % NUM_COLUMNS].push(list);
+            });
+        } else {
+            // Default distribution
+            lists.forEach((list, index) => {
+                columns[index % NUM_COLUMNS].push(list);
+            });
+        }
+    }
 
     // Generate the HTML for the columns and their cards
     const gridHtml = `
@@ -169,27 +230,18 @@ function setupSorting() {
     const columns = document.querySelectorAll('.grid-column');
     columns.forEach(column => {
         new Sortable(column, {
-            group: 'shared-lists', // Allows dragging between columns with the same group name
+            group: 'shared-lists',
             animation: 150,
             ghostClass: 'sortable-ghost',
             dragClass: 'sortable-drag',
             onEnd: () => {
-                // When any drag ends, recalculate the entire order and save
-                const allCards = document.querySelectorAll('.list-section');
-                const newOrderIds = Array.from(allCards).map(card => card.dataset.listId);
-
-                // Reorder the main `rootLists` array to match the new visual order
-                const listMap = new Map(rootLists.map(list => [list.id, list]));
-                rootLists = newOrderIds.map(id => listMap.get(id));
-
+                // Save immediately when drag ends
                 saveColumnOrder();
             },
             onAdd: (evt) => {
-                // Add highlight to column being dragged over
                 evt.to.classList.add('drag-over-column');
             },
             onRemove: (evt) => {
-                // Remove highlight when item leaves
                 evt.from.classList.remove('drag-over-column');
             },
         });
@@ -198,18 +250,50 @@ function setupSorting() {
 
 // Save column order to localStorage
 async function saveColumnOrder() {
-    const order = rootLists.map(list => list.id);
-    localStorage.setItem('karakeep-column-order', JSON.stringify(order));
-    if (config && config.preferences) config.preferences.columnOrder = order;
+    // Get current column layout
+    const columnLayout = {};
+    const columns = document.querySelectorAll('.grid-column');
+    
+    columns.forEach((column, index) => {
+        const cards = column.querySelectorAll('.list-section');
+        columnLayout[index] = Array.from(cards).map(card => card.dataset.listId);
+    });
+    
+    // Also maintain the flat order for backward compatibility
+    const order = [];
+    for (let i = 0; i < NUM_COLUMNS; i++) {
+        if (columnLayout[i]) {
+            order.push(...columnLayout[i]);
+        }
+    }
+    
+    // Update the config object
+    if (config && config.preferences) {
+        config.preferences.columnLayout = columnLayout;
+        config.preferences.columnOrder = order; // Keep for backward compatibility
+    }
 
+    // Save to localStorage first as immediate backup
+    localStorage.setItem('karakeep-column-layout', JSON.stringify(columnLayout));
+    localStorage.setItem('karakeep-column-order', JSON.stringify(order));
+
+    // Try to save to server
     try {
-        const response = await fetch('/api/preferences', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(config.preferences) });
-        if (response.ok) console.log('Preferences saved to server');
-        else console.log('Server save failed, using localStorage only');
+        const response = await fetch('/api/preferences', { 
+            method: 'POST', 
+            headers: { 'Content-Type': 'application/json' }, 
+            body: JSON.stringify(config.preferences) 
+        });
+        
+        if (response.ok) {
+            console.log('Preferences saved to server');
+        } else {
+            console.log('Server save failed, but localStorage backup exists');
+        }
     } catch (error) {
         console.log('No server available, using localStorage only');
     }
-    console.log('Column order saved:', order);
+    console.log('Column layout saved:', columnLayout);
 }
 
 // Setup search functionality
@@ -221,10 +305,86 @@ function setupSearch() {
 // Filter bookmarks based on search term
 function filterBookmarks(searchTerm) {
     const allLists = document.querySelectorAll('.list-section');
+    const columns = document.querySelectorAll('.grid-column');
+    
+    if (!searchTerm) {
+        // Reset everything if search is empty
+        allLists.forEach(list => {
+            list.style.display = '';
+            // Reset all bookmarks in this list section
+            const allBookmarks = list.querySelectorAll('.bookmark-item');
+            allBookmarks.forEach(bookmark => bookmark.style.display = '');
+            // Reset all nested lists
+            const nestedLists = list.querySelectorAll('.nested-list-1, .nested-list-2');
+            nestedLists.forEach(nestedList => nestedList.style.display = '');
+        });
+        columns.forEach(column => column.style.display = '');
+        return;
+    }
+    
+    // Track which columns have visible content
+    const columnsWithContent = new Set();
+    
     allLists.forEach(list => {
-        const listContent = list.textContent.toLowerCase();
-        const hasTerm = listContent.includes(searchTerm);
-        list.style.display = hasTerm ? '' : 'none';
+        const bookmarks = list.querySelectorAll('.bookmark-item');
+        let hasVisibleBookmarks = false;
+        
+        // Check each bookmark individually
+        bookmarks.forEach(bookmark => {
+            const bookmarkText = bookmark.textContent.toLowerCase();
+            const bookmarkTitle = bookmark.getAttribute('title')?.toLowerCase() || '';
+            const bookmarkUrl = bookmark.getAttribute('href')?.toLowerCase() || '';
+            
+            // Check if bookmark matches search term in title, text content, or URL
+            const matches = bookmarkText.includes(searchTerm) || 
+                          bookmarkTitle.includes(searchTerm) || 
+                          bookmarkUrl.includes(searchTerm);
+            
+            bookmark.style.display = matches ? '' : 'none';
+            if (matches) hasVisibleBookmarks = true;
+        });
+        
+        // Also check nested lists recursively
+        const nestedLists = list.querySelectorAll('.nested-list-1, .nested-list-2');
+        nestedLists.forEach(nestedList => {
+            const nestedBookmarks = nestedList.querySelectorAll('.bookmark-item');
+            let hasVisibleNestedBookmarks = false;
+            
+            nestedBookmarks.forEach(bookmark => {
+                const bookmarkText = bookmark.textContent.toLowerCase();
+                const bookmarkTitle = bookmark.getAttribute('title')?.toLowerCase() || '';
+                const bookmarkUrl = bookmark.getAttribute('href')?.toLowerCase() || '';
+                
+                const matches = bookmarkText.includes(searchTerm) || 
+                              bookmarkTitle.includes(searchTerm) || 
+                              bookmarkUrl.includes(searchTerm);
+                
+                bookmark.style.display = matches ? '' : 'none';
+                if (matches) {
+                    hasVisibleNestedBookmarks = true;
+                    hasVisibleBookmarks = true;
+                }
+            });
+            
+            // Hide nested list if it has no visible bookmarks
+            nestedList.style.display = hasVisibleNestedBookmarks ? '' : 'none';
+        });
+        
+        // Show/hide the entire list section based on whether it has visible bookmarks
+        list.style.display = hasVisibleBookmarks ? '' : 'none';
+        
+        // Track which column this list belongs to
+        if (hasVisibleBookmarks) {
+            const parentColumn = list.closest('.grid-column');
+            if (parentColumn) {
+                columnsWithContent.add(parentColumn);
+            }
+        }
+    });
+    
+    // Hide columns that have no visible content
+    columns.forEach(column => {
+        column.style.display = columnsWithContent.has(column) ? '' : 'none';
     });
 }
 
@@ -237,11 +397,30 @@ function setupFaviconErrorHandling() {
 
 // Load saved preferences from localStorage on startup
 function loadSavedPreferences() {
+    // Try to load column layout first (new format)
+    const savedLayout = localStorage.getItem('karakeep-column-layout');
+    if (savedLayout) {
+        try {
+            const layout = JSON.parse(savedLayout);
+            if (typeof layout === 'object' && !Array.isArray(layout)) {
+                config.preferences.columnLayout = layout;
+                console.log('Loaded column layout from localStorage');
+                return; // Don't need to load old format
+            }
+        } catch (error) {
+            console.error('Error loading saved column layout:', error);
+        }
+    }
+    
+    // Fallback to old column order format
     const savedOrder = localStorage.getItem('karakeep-column-order');
     if (savedOrder) {
         try {
             const order = JSON.parse(savedOrder);
-            if (Array.isArray(order)) config.preferences.columnOrder = order;
+            if (Array.isArray(order)) {
+                config.preferences.columnOrder = order;
+                console.log('Loaded column order from localStorage (legacy format)');
+            }
         } catch (error) {
             console.error('Error loading saved preferences:', error);
         }

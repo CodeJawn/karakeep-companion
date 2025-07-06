@@ -450,3 +450,35 @@ input:focus-visible {
     white-space: nowrap;
     border-width: 0;
 }
+
+/* Smooth transitions for search filtering */
+.grid-column {
+    transition: opacity var(--transition-fast), width var(--transition-fast);
+}
+
+.grid-column[style*="display: none"] {
+    width: 0;
+    opacity: 0;
+    overflow: hidden;
+}
+
+.list-section,
+.nested-list-1,
+.nested-list-2 {
+    transition: opacity var(--transition-fast), transform var(--transition-fast);
+}
+
+.bookmark-item {
+    transition: all var(--transition-fast);
+}
+
+/* Remove min-height from columns during search to prevent empty space */
+.grid-container:has(.bookmark-item[style*="display: none"]) .grid-column {
+    min-height: auto;
+}
+
+/* Ensure hidden bookmarks don't take up space */
+.bookmark-item[style*="display: none"] {
+    position: absolute;
+    visibility: hidden;
+}
