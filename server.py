@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Simple server for KaraKeep Homedash with preference persistence
+Simple server for KaraKeep Companion with preference persistence
 This is optional - you can use any static file server if you don't need
 cross-device preference syncing.
 """
@@ -12,9 +12,11 @@ from urllib.parse import urlparse
 
 DEFAULT_CONFIG = {
     "karakeepUrl": "http://localhost:3000",
+    "apiKey": "",  # User must add their API key
     "bookmarkTarget": "_self",
     "preferences": {
-        "columnOrder": []
+        "columnOrder": [],
+        "columnLayout": {}
     }
 }
 
@@ -29,6 +31,7 @@ def ensure_config_exists():
         with open(config_path, 'w') as f:
             json.dump(DEFAULT_CONFIG, f, indent=2)
         print(f"Created default config at {config_path}")
+        print("⚠️  Please add your KaraKeep API key to config/config.json")
 
 class KaraKeepHandler(SimpleHTTPRequestHandler):
     def do_GET(self):
@@ -96,6 +99,16 @@ class KaraKeepHandler(SimpleHTTPRequestHandler):
 if __name__ == '__main__':
     # Ensure config exists before starting server
     ensure_config_exists()
+    
+    # Check if API key is configured
+    config_path = 'config/config.json'
+    if os.path.exists(config_path):
+        with open(config_path, 'r') as f:
+            config = json.load(f)
+            if not config.get('apiKey'):
+                print("⚠️  WARNING: No API key configured in config/config.json")
+                print("   The app will not be able to fetch data from KaraKeep.")
+                print("   Please add your API key to the config file.")
     
     port = 8595
     server_address = ('', port)
