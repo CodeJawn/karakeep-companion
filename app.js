@@ -87,8 +87,31 @@ async function initSQLite() {
 async function loadBookmarks() {
     updateLoadingMessage('Loading bookmarks...');
     try {
-        const lists = db.exec({ sql: `SELECT id, name, description, icon, parentId FROM bookmarkLists ORDER BY name`, returnValue: "resultRows", rowMode: "object" });
-        const bookmarksInLists = db.exec({ sql: `SELECT b.id, b.title, bl.url, bl.favicon, bl.description, bil.listId FROM bookmarks b JOIN bookmarkLinks bl ON b.id = bl.id JOIN bookmarksInLists bil ON b.id = bil.bookmarkId WHERE b.type = 'link' ORDER BY b.title`, returnValue: "resultRows", rowMode: "object" });
+        const lists = db.exec({ 
+            sql: `SELECT id, name, description, icon, parentId FROM bookmarkLists ORDER BY name`, 
+            returnValue: "resultRows", 
+            rowMode: "object" 
+        });
+        
+        // FIXED: Now selecting both b.title and bl.title
+        const bookmarksInLists = db.exec({ 
+            sql: `SELECT 
+                    b.id, 
+                    b.title as bookmark_title, 
+                    bl.title as link_title,  -- Added this line to get the crawled title
+                    bl.url, 
+                    bl.favicon, 
+                    bl.description, 
+                    bil.listId 
+                FROM bookmarks b 
+                JOIN bookmarkLinks bl ON b.id = bl.id 
+                JOIN bookmarksInLists bil ON b.id = bil.bookmarkId 
+                WHERE b.type = 'link' 
+                ORDER BY COALESCE(b.title, bl.title)`,
+            returnValue: "resultRows", 
+            rowMode: "object" 
+        });
+        
         bookmarksData = bookmarksInLists;
 
         const listsById = {};
@@ -220,9 +243,45 @@ function renderList(list, level = 0) {
 
 // Render a single bookmark item
 function renderBookmark(bookmark) {
-    const faviconUrl = bookmark.favicon || `https://www.google.com/s2/favicons?domain=${new URL(bookmark.url).hostname}`;
-    const target = config.bookmarkTarget === '_blank' ? 'target="_blank" rel="noopener noreferrer"' : '';
-    return `<a href="${escapeHtml(bookmark.url)}" class="bookmark-item" title="${escapeHtml(bookmark.title || bookmark.url)}" ${target}><img src="${escapeHtml(faviconUrl)}" alt="" class="bookmark-favicon" loading="lazy"><span class="bookmark-title">${escapeHtml(bookmark.title || 'Untitled')}</span></a>`;
+    // Now we have bookmark_title and link_title from the query
+    // Priority: bookmark_title (user-set) > link_title (crawled) > 'Untitled'
+    let title = bookmark.bookmark_title || bookmark.link_title || 'Untitled';
+    
+    const url = bookmark.url || bookmark.asset?.sourceUrl || '#';
+    
+    // Get favicon URL
+    let faviconUrl = bookmark.favicon || '';
+    if (!faviconUrl && bookmark.url) {
+        try {
+            // Fallback to Google's favicon service
+            const domain = new URL(bookmark.url).hostname;
+            faviconUrl = `https://www.google.com/s2/favicons?domain=${domain}&sz=32`;
+        } catch (e) {
+            // Invalid URL, skip favicon
+        }
+    }
+    
+    // Determine target attribute
+    const target = (config && config.bookmarkTarget) || '_self';
+    
+    return `
+        <a href="${url}" 
+           class="bookmark-item" 
+           title="${title}"
+           target="${target}"
+           rel="${target === '_blank' ? 'noopener noreferrer' : ''}"
+           draggable="false">
+            <div class="bookmark-content">
+                ${faviconUrl ? `
+                    <img src="${faviconUrl}" 
+                         alt="" 
+                         class="bookmark-favicon"
+                         onerror="this.style.display='none'">
+                ` : ''}
+                <span class="bookmark-title">${title}</span>
+            </div>
+        </a>
+    `;
 }
 
 // MODIFIED: Initializes SortableJS on each column and groups them
