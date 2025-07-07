@@ -10,7 +10,7 @@ A more compact home page dashboard style view for browsing your [KaraKeep](https
 - 🔍 **Real-time Search** - Instantly filter bookmarks as you type
 - 🖱️ **Drag & Drop** - Reorder lists to your preference
 - 📱 **Responsive** - Works beautifully on desktop, tablet, and mobile
-- 🔌 **API Integration** - Connects directly to KaraKeep via API
+- 🔌 **API Integration** - Connects to KaraKeep via API with built-in CORS proxy
 - 🔒 **Privacy-First** - Uses your own KaraKeep instance and API key
 
 ## Quick Start with Docker
@@ -55,7 +55,7 @@ nano ./config/config.json
 ## Manual Installation
 
 ### Prerequisites
-- Python 3.7+ (for the server)
+- Python 3.7+ with Flask
 - A running KaraKeep instance
 - Your KaraKeep API key
 
@@ -67,18 +67,24 @@ git clone https://github.com/codejawn/karakeep-homedash.git
 cd karakeep-homedash
 ```
 
-2. Start the server:
+2. Install Python dependencies:
+```bash
+pip install -r requirements.txt
+# or manually: pip install flask requests urllib3
+```
+
+3. Start the server:
 ```bash
 python server.py
 ```
 
-3. Edit the config file:
+4. Edit the config file:
 ```bash
 # Edit config/config.json and add your KaraKeep API key
 nano config/config.json
 ```
 
-4. Open http://localhost:8595 in your browser
+5. Open http://localhost:8595 in your browser
 
 ## Configuration
 
@@ -120,11 +126,14 @@ The application uses a `config/config.json` file for settings. On first run, a d
 For development without Docker:
 
 ```bash
-# Start the development server
+# Install dependencies
+pip install -r requirements.txt
+
+# Start the Flask development server
 python server.py
 
-# Or use any static file server if you don't need preference persistence
-python -m http.server 8595
+# For development with auto-reload
+FLASK_ENV=development python server.py
 ```
 
 ### Making Changes
@@ -139,6 +148,8 @@ KaraKeep HomeDash uses the following KaraKeep API endpoints:
 - `GET /api/lists` - Fetch all bookmark lists
 - `GET /api/bookmarks` - Fetch all bookmarks
 
+The Flask server includes a built-in proxy that forwards these requests to avoid CORS issues when running on different domains.
+
 ## Troubleshooting
 
 ### "Invalid API key"
@@ -151,10 +162,16 @@ KaraKeep HomeDash uses the following KaraKeep API endpoints:
 - Check browser console for errors
 - Ensure you have bookmarks in your KaraKeep instance
 
+### CORS errors
+- The Flask server includes a built-in proxy to handle CORS issues
+- Make sure you're using the Flask server (`server.py`) and not a basic HTTP server
+- The proxy automatically forwards requests to your KaraKeep instance
+
 ### Connection errors
 - Check that KaraKeep is running and accessible at the configured URL
 - Ensure there are no firewall or network issues
 - If using Docker, make sure the containers can communicate
+- For self-signed certificates, the proxy is configured to accept them
 
 ### Drag and drop not saving
 - The config directory must be writable

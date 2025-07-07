@@ -13,9 +13,9 @@ __pycache__/
 *$py.class
 *.so
 .Python
-env/
 venv/
-.env
+env/
+.venv
 
 # IDE
 .vscode/
