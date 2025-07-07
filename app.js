@@ -1,21 +1,17 @@
 // KaraKeep HomeDash App
-// Main application logic with drag-and-drop support
+// Main application logic with drag-and-drop support - API Version
 
 // Global state
-let db = null;
 let bookmarksData = [];
 let config = null;
 let rootLists = [];
 const NUM_COLUMNS = 4; // Define the number of columns
 
-// SQLite WASM CDN URL
-const SQLITE_WASM_URL = 'https://cdn.jsdelivr.net/npm/@sqlite.org/sqlite-wasm@3.45.1-build1/sqlite-wasm/jswasm/sqlite3.mjs';
-
 // Initialize the application
 async function init() {
     try {
         await loadConfig();
-        await initSQLite();
+        await loadBookmarksFromAPI();
     } catch (error) {
         console.error('Failed to initialize application:', error);
         showError('Failed to initialize application', error.message);
@@ -28,6 +24,15 @@ async function loadConfig() {
         const response = await fetch('./config.json');
         if (response.ok) {
             config = await response.json();
+            
+            // Validate required config fields
+            if (!config.karakeepUrl) {
+                throw new Error('Missing karakeepUrl in config');
+            }
+            if (!config.apiKey) {
+                throw new Error('Missing apiKey in config. Please add your KaraKeep API key to config.json');
+            }
+            
             const karakeepLink = document.getElementById('karakeepLink');
             if (karakeepLink && config.karakeepUrl) {
                 karakeepLink.href = config.karakeepUrl;
@@ -38,92 +43,122 @@ async function loadConfig() {
                 config.preferences = { columnOrder: [], columnLayout: {} };
             }
             
-            // Don't load from localStorage if we have server config
             console.log('Loaded config from server');
         } else {
-            config = { 
-                karakeepUrl: 'http://localhost:3000', 
-                bookmarkTarget: '_self', 
-                preferences: { columnOrder: [], columnLayout: {} } 
-            };
-            // Only load from localStorage if server config is not available
-            loadSavedPreferences();
+            throw new Error('Could not load config.json');
         }
     } catch (error) {
-        console.warn('Could not load config.json, using defaults:', error);
-        config = { 
-            karakeepUrl: 'http://localhost:3000', 
-            bookmarkTarget: '_self', 
-            preferences: { columnOrder: [], columnLayout: {} } 
-        };
-        // Only load from localStorage if server config is not available
-        loadSavedPreferences();
+        console.error('Could not load config.json:', error);
+        throw error;
     }
 }
 
-// Initialize SQLite WASM and load database
-async function initSQLite() {
-    updateLoadingMessage('Loading SQLite WASM...');
-    const { default: sqlite3InitModule } = await import(SQLITE_WASM_URL);
-    const sqlite3 = await sqlite3InitModule({ print: console.log, printErr: console.error });
-
-    updateLoadingMessage('Loading database...');
-    const response = await fetch('./db.db');
-    if (!response.ok) throw new Error('Could not find db.db in the current directory');
+// Make API request with authentication
+async function makeAPIRequest(endpoint) {
+    const url = `${config.karakeepUrl}/api${endpoint}`;
+    const response = await fetch(url, {
+        method: 'GET',
+        headers: {
+            'Authorization': `Bearer ${config.apiKey}`,
+            'Content-Type': 'application/json'
+        }
+    });
     
-    const arrayBuffer = await response.arrayBuffer();
-    const uint8Array = new Uint8Array(arrayBuffer);
+    if (!response.ok) {
+        if (response.status === 401) {
+            throw new Error('Invalid API key. Please check your config.json');
+        }
+        throw new Error(`API request failed: ${response.status} ${response.statusText}`);
+    }
     
-    db = new sqlite3.oo1.DB();
-    const p = sqlite3.wasm.allocFromTypedArray(uint8Array);
-    const rc = sqlite3.capi.sqlite3_deserialize(db.pointer, 'main', p, uint8Array.length, uint8Array.length, sqlite3.capi.SQLITE_DESERIALIZE_FREEONCLOSE);
-    if (rc !== sqlite3.capi.SQLITE_OK) throw new Error('Failed to load database file');
-    
-    console.log('Successfully loaded db.db');
-    await loadBookmarks();
+    return await response.json();
 }
 
-// Load bookmarks from database
-async function loadBookmarks() {
-    updateLoadingMessage('Loading bookmarks...');
+// Load bookmarks from KaraKeep API
+async function loadBookmarksFromAPI() {
+    updateLoadingMessage('Loading lists...');
+    
     try {
-        const lists = db.exec({ 
-            sql: `SELECT id, name, description, icon, parentId FROM bookmarkLists ORDER BY name`, 
-            returnValue: "resultRows", 
-            rowMode: "object" 
-        });
+        // Fetch all lists
+        const listsResponse = await makeAPIRequest('/lists');
+        const lists = listsResponse.lists || [];
         
-        // FIXED: Now selecting both b.title and bl.title
-        const bookmarksInLists = db.exec({ 
-            sql: `SELECT 
-                    b.id, 
-                    b.title as bookmark_title, 
-                    bl.title as link_title,  -- Added this line to get the crawled title
-                    bl.url, 
-                    bl.favicon, 
-                    bl.description, 
-                    bil.listId 
-                FROM bookmarks b 
-                JOIN bookmarkLinks bl ON b.id = bl.id 
-                JOIN bookmarksInLists bil ON b.id = bil.bookmarkId 
-                WHERE b.type = 'link' 
-                ORDER BY COALESCE(b.title, bl.title)`,
-            returnValue: "resultRows", 
-            rowMode: "object" 
-        });
+        updateLoadingMessage('Loading bookmarks...');
         
-        bookmarksData = bookmarksInLists;
-
+        // Fetch all bookmarks
+        const bookmarksResponse = await makeAPIRequest('/bookmarks');
+        const allBookmarks = bookmarksResponse.bookmarks || [];
+        
+        // Filter for link type bookmarks
+        const linkBookmarks = allBookmarks.filter(bookmark => bookmark.type === 'link');
+        
+        // Create a map of lists by ID
         const listsById = {};
-        lists.forEach(list => { listsById[list.id] = { ...list, children: [], bookmarks: [] }; });
-        lists.forEach(list => { if (list.parentId && listsById[list.parentId]) listsById[list.parentId].children.push(listsById[list.id]); });
-        bookmarksInLists.forEach(bookmark => { if (listsById[bookmark.listId]) listsById[bookmark.listId].bookmarks.push(bookmark); });
-
+        lists.forEach(list => {
+            listsById[list.id] = {
+                id: list.id,
+                name: list.name,
+                description: list.description || '',
+                icon: list.icon || '📁',
+                parentId: list.parentId || null,
+                children: [],
+                bookmarks: []
+            };
+        });
+        
+        // Build parent-child relationships
+        lists.forEach(list => {
+            if (list.parentId && listsById[list.parentId]) {
+                listsById[list.parentId].children.push(listsById[list.id]);
+            }
+        });
+        
+        // Map bookmarks to their lists
+        linkBookmarks.forEach(bookmark => {
+            // Transform bookmark data to match the expected format
+            const transformedBookmark = {
+                id: bookmark.id,
+                bookmark_title: bookmark.title || bookmark.name,
+                link_title: bookmark.metadata?.title || '',
+                url: bookmark.url || bookmark.sourceUrl || '#',
+                favicon: bookmark.favicon || bookmark.metadata?.favicon || '',
+                description: bookmark.description || bookmark.metadata?.description || '',
+                listId: bookmark.listId
+            };
+            
+            if (bookmark.listId && listsById[bookmark.listId]) {
+                listsById[bookmark.listId].bookmarks.push(transformedBookmark);
+            }
+        });
+        
+        // Sort bookmarks within each list
+        Object.values(listsById).forEach(list => {
+            list.bookmarks.sort((a, b) => {
+                const titleA = (a.bookmark_title || a.link_title || 'Untitled').toLowerCase();
+                const titleB = (b.bookmark_title || b.link_title || 'Untitled').toLowerCase();
+                return titleA.localeCompare(titleB);
+            });
+        });
+        
+        // Store all bookmarks for search functionality
+        bookmarksData = linkBookmarks.map(bookmark => ({
+            id: bookmark.id,
+            bookmark_title: bookmark.title || bookmark.name,
+            link_title: bookmark.metadata?.title || '',
+            url: bookmark.url || bookmark.sourceUrl || '#',
+            favicon: bookmark.favicon || bookmark.metadata?.favicon || '',
+            description: bookmark.description || bookmark.metadata?.description || '',
+            listId: bookmark.listId
+        }));
+        
+        // Get root lists (no parent)
         rootLists = lists
             .filter(list => !list.parentId)
             .map(list => listsById[list.id])
-            .filter(list => list.bookmarks.length > 0 || hasBookmarksInChildren(list));
-
+            .filter(list => list.bookmarks.length > 0 || hasBookmarksInChildren(list))
+            .sort((a, b) => a.name.localeCompare(b.name));
+        
+        // Apply saved column order if available
         if (config.preferences.columnOrder && config.preferences.columnOrder.length > 0) {
             const orderedLists = [];
             const listMap = new Map(rootLists.map(list => [list.id, list]));
@@ -136,11 +171,11 @@ async function loadBookmarks() {
             listMap.forEach(list => orderedLists.push(list));
             rootLists = orderedLists;
         }
-
+        
         renderLists(rootLists);
     } catch (error) {
         console.error('Error loading bookmarks:', error);
-        throw new Error('Failed to load bookmarks from database');
+        throw new Error(error.message || 'Failed to load bookmarks from API');
     }
 }
 
@@ -243,11 +278,10 @@ function renderList(list, level = 0) {
 
 // Render a single bookmark item
 function renderBookmark(bookmark) {
-    // Now we have bookmark_title and link_title from the query
     // Priority: bookmark_title (user-set) > link_title (crawled) > 'Untitled'
     let title = bookmark.bookmark_title || bookmark.link_title || 'Untitled';
     
-    const url = bookmark.url || bookmark.asset?.sourceUrl || '#';
+    const url = bookmark.url || '#';
     
     // Get favicon URL
     let faviconUrl = bookmark.favicon || '';
@@ -504,7 +538,7 @@ function updateLoadingMessage(message) {
 }
 function showError(title, message) {
     const content = document.getElementById('content');
-    content.innerHTML = `<div class="error"><h2>${escapeHtml(title)}</h2><p>${escapeHtml(message)}</p><small>Please ensure db.db is in the same directory as this HTML file.</small></div>`;
+    content.innerHTML = `<div class="error"><h2>${escapeHtml(title)}</h2><p>${escapeHtml(message)}</p><small>Please check your config.json file and ensure your API key is valid.</small></div>`;
 }
 
 // Start the application when DOM is ready

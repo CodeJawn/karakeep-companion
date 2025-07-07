@@ -12,9 +12,11 @@ from urllib.parse import urlparse
 
 DEFAULT_CONFIG = {
     "karakeepUrl": "http://localhost:3000",
+    "apiKey": "YOUR_KARAKEEP_API_KEY_HERE",
     "bookmarkTarget": "_self",
     "preferences": {
-        "columnOrder": []
+        "columnOrder": [],
+        "columnLayout": {}
     }
 }
 
@@ -29,6 +31,7 @@ def ensure_config_exists():
         with open(config_path, 'w') as f:
             json.dump(DEFAULT_CONFIG, f, indent=2)
         print(f"Created default config at {config_path}")
+        print("⚠️  Please edit config/config.json and add your KaraKeep API key!")
 
 class KaraKeepHandler(SimpleHTTPRequestHandler):
     def do_GET(self):

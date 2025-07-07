@@ -1,6 +1,6 @@
 # KaraKeep HomeDash
 
-A more compact home page dashboard style view for browsing your [KaraKeep](https://github.com/karakeep-app/karakeep) bookmarks. All Karakeep bookmarks are shown on one single page, organized by lists.  This is meant to be a very simple and uncluttered dashboard to your bookmarks, all bookmark management capabilities are done through the full (and awesome) KaraKeep app.  
+A more compact home page dashboard style view for browsing your [KaraKeep](https://github.com/karakeep-app/karakeep) bookmarks. All Karakeep bookmarks are shown on one single page, organized by lists. This is meant to be a very simple and uncluttered dashboard to your bookmarks, all bookmark management capabilities are done through the full (and awesome) KaraKeep app.
 
 ![KaraKeep HomeDash Screenshot](screenshot.png)
 
@@ -10,14 +10,15 @@ A more compact home page dashboard style view for browsing your [KaraKeep](https
 - 🔍 **Real-time Search** - Instantly filter bookmarks as you type
 - 🖱️ **Drag & Drop** - Reorder lists to your preference
 - 📱 **Responsive** - Works beautifully on desktop, tablet, and mobile
-- 🚀 **Fast** - SQLite WASM runs entirely in your browser
-- 🔒 **Privacy-First** - Your data never leaves your device
+- 🔌 **API Integration** - Connects directly to KaraKeep via API
+- 🔒 **Privacy-First** - Uses your own KaraKeep instance and API key
 
 ## Quick Start with Docker
 
 ### Prerequisites
 - Docker and Docker Compose installed
-- Access to your KaraKeep `db.db` file through a docker volume
+- A running KaraKeep instance
+- Your KaraKeep API key (get it from KaraKeep settings)
 
 ### Using Pre-built Image
 
@@ -33,8 +34,6 @@ services:
     ports:
       - "8595:8595"
     volumes:
-      # Update path to your KaraKeep database
-      - /path/to/karakeep/db.db:/app/db.db:ro
       # Config directory for persistence
       - ./config:/app/config
     restart: unless-stopped
@@ -45,13 +44,20 @@ services:
 docker-compose up -d
 ```
 
-3. Open http://localhost:8595 in your browser
+3. Edit the config file to add your API key:
+```bash
+# Edit ./config/config.json and add your KaraKeep API key
+nano ./config/config.json
+```
+
+4. Open http://localhost:8595 in your browser
 
 ## Manual Installation
 
 ### Prerequisites
 - Python 3.7+ (for the server)
-- Your KaraKeep `db.db` file
+- A running KaraKeep instance
+- Your KaraKeep API key
 
 ### Setup
 
@@ -61,39 +67,51 @@ git clone https://github.com/codejawn/karakeep-homedash.git
 cd karakeep-homedash
 ```
 
-2. Copy your KaraKeep database:
-```bash
-cp /path/to/karakeep/db.db .
-```
-
-3. Start the server:
+2. Start the server:
 ```bash
 python server.py
+```
+
+3. Edit the config file:
+```bash
+# Edit config/config.json and add your KaraKeep API key
+nano config/config.json
 ```
 
 4. Open http://localhost:8595 in your browser
 
 ## Configuration
 
-The application uses a `config/config.json` file for settings. If it doesn't exist, it will be created automatically with defaults.
+The application uses a `config/config.json` file for settings. On first run, a default config file will be created. You must edit this file to add your KaraKeep API key.
 
 ### Configuration Options
 
 ```json
 {
   "karakeepUrl": "http://localhost:3000",
+  "apiKey": "YOUR_KARAKEEP_API_KEY_HERE",
   "bookmarkTarget": "_self",
   "preferences": {
-    "columnOrder": []
+    "columnOrder": [],
+    "columnLayout": {}
   }
 }
 ```
 
-| Option | Description | Default |
-|--------|-------------|---------|
-| `karakeepUrl` | URL to your KaraKeep instance | `http://localhost:3000` |
-| `bookmarkTarget` | Where to open bookmarks: `_self` (same tab) or `_blank` (new tab) | `_self` |
-| `preferences.columnOrder` | Saved order of bookmark lists (managed automatically) | `[]` |
+| Option | Description | Default | Required |
+|--------|-------------|---------|----------|
+| `karakeepUrl` | URL to your KaraKeep instance | `http://localhost:3000` | Yes |
+| `apiKey` | Your KaraKeep API key | Must be set | Yes |
+| `bookmarkTarget` | Where to open bookmarks: `_self` (same tab) or `_blank` (new tab) | `_self` | No |
+| `preferences.columnOrder` | Saved order of bookmark lists (managed automatically) | `[]` | No |
+| `preferences.columnLayout` | Saved column layout (managed automatically) | `{}` | No |
+
+### Getting Your API Key
+
+1. Open your KaraKeep instance
+2. Go to Settings → API
+3. Create a new API key or copy an existing one
+4. Add it to your `config/config.json`
 
 ## Development
 
@@ -102,8 +120,6 @@ The application uses a `config/config.json` file for settings. If it doesn't exi
 For development without Docker:
 
 ```bash
-# Install dependencies (none required!)
-
 # Start the development server
 python server.py
 
@@ -117,28 +133,28 @@ python -m http.server 8595
 2. Refresh your browser to see changes
 3. Submit a pull request with your improvements!
 
-### Generating Screenshots
+### API Endpoints Used
 
-To create a screenshot for documentation:
-
-1. Open `mockup.html` in your browser
-2. Resize window to 1440px width
-3. Take a screenshot
-4. Save as `screenshot.png`
-
-The mockup includes sample bookmarks tailored for self-hosting enthusiasts!
+KaraKeep HomeDash uses the following KaraKeep API endpoints:
+- `GET /api/lists` - Fetch all bookmark lists
+- `GET /api/bookmarks` - Fetch all bookmarks
 
 ## Troubleshooting
 
-### "Could not find db.db"
-Make sure your KaraKeep database is in the correct location:
-- For Docker: Check your volume mount path in docker-compose.yml
-- For manual installation: Copy db.db to the project directory
+### "Invalid API key"
+- Check that your API key is correctly set in `config/config.json`
+- Ensure your KaraKeep instance is running and accessible
+- Verify the API key has proper permissions
 
 ### Bookmarks not showing
-- Verify your db.db file is from KaraKeep
+- Verify your KaraKeep instance URL is correct in the config
 - Check browser console for errors
-- Ensure the database contains bookmarks
+- Ensure you have bookmarks in your KaraKeep instance
+
+### Connection errors
+- Check that KaraKeep is running and accessible at the configured URL
+- Ensure there are no firewall or network issues
+- If using Docker, make sure the containers can communicate
 
 ### Drag and drop not saving
 - The config directory must be writable
@@ -155,4 +171,4 @@ This project is licensed under the GNU V3 license - see the LICENSE file for det
 ## Acknowledgments
 
 - Built to complement the amazing [KaraKeep](https://github.com/karakeep-app/karakeep)
-- Uses [SQLite WASM](https://sqlite.org/wasm/doc/trunk/index.md) for browser-based database access
+- Uses the [KaraKeep API](https://docs.karakeep.app/API/karakeep-api) for data access
