@@ -81,16 +81,61 @@ async function loadBookmarksFromAPI() {
     try {
         // Fetch all lists
         const listsResponse = await makeAPIRequest('/lists');
-        const lists = listsResponse.lists || [];
+        console.log('Lists API response:', listsResponse);
+        const lists = listsResponse.lists || listsResponse || [];  // Handle both wrapped and unwrapped responses
         
         updateLoadingMessage('Loading bookmarks...');
         
-        // Fetch all bookmarks
-        const bookmarksResponse = await makeAPIRequest('/bookmarks');
-        const allBookmarks = bookmarksResponse.bookmarks || [];
+        // Initialize empty bookmarks array
+        const allBookmarks = [];
         
-        // Filter for link type bookmarks
-        const linkBookmarks = allBookmarks.filter(bookmark => bookmark.type === 'link');
+        console.log(`Found ${lists.length} lists, fetching bookmarks for each...`);
+        
+        // Fetch bookmarks for each list
+        for (let i = 0; i < lists.length; i++) {
+            const list = lists[i];
+            updateLoadingMessage(`Loading bookmarks from list ${i + 1} of ${lists.length}...`);
+            
+            try {
+                const listBookmarksResponse = await makeAPIRequest(`/lists/${list.id}/bookmarks`);
+                console.log(`Bookmarks for list ${list.id} (${list.name}):`, listBookmarksResponse);
+                
+                // Handle different response formats
+                let listBookmarks = [];
+                if (Array.isArray(listBookmarksResponse)) {
+                    listBookmarks = listBookmarksResponse;
+                } else if (listBookmarksResponse.bookmarks) {
+                    listBookmarks = listBookmarksResponse.bookmarks;
+                } else if (listBookmarksResponse.data) {
+                    listBookmarks = listBookmarksResponse.data;
+                }
+                
+                // Check for pagination
+                if (listBookmarksResponse.nextCursor) {
+                    console.warn(`List ${list.name} has more bookmarks available (pagination not implemented)`);
+                }
+                
+                // Filter for link type bookmarks
+                const linkBookmarks = listBookmarks.filter(bookmark => 
+                    !bookmark.content || bookmark.content.type === 'link'
+                );
+                
+                // Add listId to each bookmark
+                linkBookmarks.forEach(bookmark => {
+                    bookmark.listId = list.id;
+                    allBookmarks.push(bookmark);
+                });
+                
+                console.log(`Found ${linkBookmarks.length} link bookmarks in list ${list.name}`);
+            } catch (error) {
+                console.log(`Could not fetch bookmarks for list ${list.id}:`, error);
+            }
+        }
+        
+        console.log(`Total bookmarks fetched: ${allBookmarks.length}`);
+        
+        updateLoadingMessage('Processing bookmarks...');
+        
         
         // Create a map of lists by ID
         const listsById = {};
@@ -114,15 +159,15 @@ async function loadBookmarksFromAPI() {
         });
         
         // Map bookmarks to their lists
-        linkBookmarks.forEach(bookmark => {
+        allBookmarks.forEach(bookmark => {
             // Transform bookmark data to match the expected format
             const transformedBookmark = {
                 id: bookmark.id,
                 bookmark_title: bookmark.title || bookmark.name,
-                link_title: bookmark.metadata?.title || '',
-                url: bookmark.url || bookmark.sourceUrl || '#',
-                favicon: bookmark.favicon || bookmark.metadata?.favicon || '',
-                description: bookmark.description || bookmark.metadata?.description || '',
+                link_title: bookmark.content?.title || bookmark.metadata?.title || '',
+                url: bookmark.content?.url || bookmark.url || bookmark.sourceUrl || '#',
+                favicon: bookmark.content?.favicon || bookmark.favicon || bookmark.metadata?.favicon || '',
+                description: bookmark.content?.description || bookmark.description || bookmark.metadata?.description || '',
                 listId: bookmark.listId
             };
             
@@ -141,13 +186,13 @@ async function loadBookmarksFromAPI() {
         });
         
         // Store all bookmarks for search functionality
-        bookmarksData = linkBookmarks.map(bookmark => ({
+        bookmarksData = allBookmarks.map(bookmark => ({
             id: bookmark.id,
             bookmark_title: bookmark.title || bookmark.name,
-            link_title: bookmark.metadata?.title || '',
-            url: bookmark.url || bookmark.sourceUrl || '#',
-            favicon: bookmark.favicon || bookmark.metadata?.favicon || '',
-            description: bookmark.description || bookmark.metadata?.description || '',
+            link_title: bookmark.content?.title || bookmark.metadata?.title || '',
+            url: bookmark.content?.url || bookmark.url || bookmark.sourceUrl || '#',
+            favicon: bookmark.content?.favicon || bookmark.favicon || bookmark.metadata?.favicon || '',
+            description: bookmark.content?.description || bookmark.description || bookmark.metadata?.description || '',
             listId: bookmark.listId
         }));
         
