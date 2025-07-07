@@ -50,15 +50,7 @@ def load_config():
 def index():
     return send_from_directory('.', 'index.html')
 
-# Serve static files
-@app.route('/<path:path>')
-def serve_static(path):
-    # Special handling for config.json
-    if path == 'config.json':
-        return send_from_directory('config', 'config.json')
-    return send_from_directory('.', path)
-
-# Proxy API requests to KaraKeep
+# Proxy API requests to KaraKeep - MUST come before catch-all route
 @app.route('/api/karakeep/<path:path>')
 def proxy_karakeep(path):
     config = load_config()
@@ -120,6 +112,14 @@ def save_preferences():
 @app.route('/api/karakeep/<path:path>', methods=['OPTIONS'])
 def handle_options(path):
     return '', 200
+
+# Serve static files - MUST come last as it's a catch-all
+@app.route('/<path:path>')
+def serve_static(path):
+    # Special handling for config.json
+    if path == 'config.json':
+        return send_from_directory('config', 'config.json')
+    return send_from_directory('.', path)
 
 if __name__ == '__main__':
     ensure_config_exists()
