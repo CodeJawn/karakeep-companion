@@ -113,16 +113,18 @@ def save_preferences():
 def handle_options(path):
     return '', 200
 
+# Special route for config.json
+@app.route('/config.json')
+def serve_config():
+    return send_from_directory('config', 'config.json')
+
 # Serve static files - MUST come last as it's a catch-all
 @app.route('/<path:path>')
 def serve_static(path):
-    # Special handling for config.json
-    if path == 'config.json':
-        return send_from_directory('config', 'config.json')
     return send_from_directory('.', path)
 
 if __name__ == '__main__':
     ensure_config_exists()
     print("KaraKeep HomeDash Server (Flask) starting...")
     print("API requests will be proxied to avoid CORS issues")
-    app.run(host='0.0.0.0', port=8595, debug=False)
+    app.run(host='0.0.0.0', port=8595, debug=True)  # Enable debug for better error messages
