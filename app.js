@@ -43,7 +43,7 @@ async function loadConfig() {
                 config.preferences = { columnOrder: [], columnLayout: {} };
             }
             
-            console.log('Loaded config from server');
+            console.log('Loaded config from server (using API proxy)');
         } else {
             throw new Error('Could not load config.json');
         }
@@ -55,11 +55,11 @@ async function loadConfig() {
 
 // Make API request with authentication
 async function makeAPIRequest(endpoint) {
-    const url = `${config.karakeepUrl}/api${endpoint}`;
+    // Use local proxy to avoid CORS issues
+    const url = `/api/karakeep${endpoint}`;
     const response = await fetch(url, {
         method: 'GET',
         headers: {
-            'Authorization': `Bearer ${config.apiKey}`,
             'Content-Type': 'application/json'
         }
     });
