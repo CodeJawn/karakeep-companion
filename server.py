@@ -53,6 +53,7 @@ def index():
 # Proxy API requests to KaraKeep - MUST come before catch-all route
 @app.route('/api/karakeep/<path:path>')
 def proxy_karakeep(path):
+    print(f"API proxy route hit for path: {path}")  # Debug line
     config = load_config()
     karakeep_url = config.get('karakeepUrl', 'http://localhost:3000')
     api_key = config.get('apiKey', '')
@@ -60,8 +61,8 @@ def proxy_karakeep(path):
     if not api_key or api_key == 'YOUR_KARAKEEP_API_KEY_HERE':
         return jsonify({"error": "API key not configured"}), 500
     
-    # Construct the full URL
-    full_url = f"{karakeep_url}/api/{path}"
+    # Construct the full URL - KaraKeep uses /api/v1/
+    full_url = f"{karakeep_url}/api/v1/{path}"
     
     # Add query parameters if any
     if request.query_string:
