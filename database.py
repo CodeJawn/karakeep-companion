@@ -7,10 +7,54 @@ Provides functions to query cached bookmark data from SQLite
 import json
 import os
 from datetime import datetime
-from sqlalchemy import create_engine, and_, or_
-from sqlalchemy.orm import sessionmaker, joinedload
+from sqlalchemy import create_engine, and_, or_, Column, String, Text, DateTime, Integer, JSON, ForeignKey, Index
+from sqlalchemy.orm import declarative_base, sessionmaker, joinedload, relationship
 from sqlalchemy.sql import func
-from sync_service import Base, List, Bookmark, SyncStatus
+
+# Define the models here to avoid circular imports
+Base = declarative_base()
+
+class List(Base):
+    __tablename__ = 'lists'
+    
+    id = Column(String, primary_key=True)
+    name = Column(String, nullable=False)
+    description = Column(Text, default='')
+    icon = Column(String, default='📁')
+    parent_id = Column(String, nullable=True)
+    position = Column(Integer, default=0)
+    last_synced = Column(DateTime, default=func.now())
+    
+    bookmarks = relationship("Bookmark", back_populates="list", cascade="all, delete-orphan")
+
+class Bookmark(Base):
+    __tablename__ = 'bookmarks'
+    
+    id = Column(String, primary_key=True)
+    list_id = Column(String, ForeignKey('lists.id'), nullable=False)
+    title = Column(String)
+    url = Column(Text)
+    description = Column(Text)
+    favicon = Column(Text)
+    bookmark_metadata = Column(JSON)
+    modified_at = Column(DateTime)
+    last_synced = Column(DateTime, default=func.now())
+    
+    list = relationship("List", back_populates="bookmarks")
+    
+    __table_args__ = (
+        Index('idx_bookmarks_list_id', 'list_id'),
+        Index('idx_bookmarks_modified', 'modified_at'),
+    )
+
+class SyncStatus(Base):
+    __tablename__ = 'sync_status'
+    
+    id = Column(Integer, primary_key=True)
+    last_full_sync = Column(DateTime)
+    last_incremental_sync = Column(DateTime)
+    status = Column(String)
+    error_message = Column(Text)
 
 class DatabaseHelper:
     def __init__(self, config):
@@ -66,7 +110,7 @@ class DatabaseHelper:
             result = []
             for bookmark in bookmarks:
                 # Extract metadata
-                metadata = bookmark.metadata or {}
+                metadata = bookmark.bookmark_metadata or {}
                 
                 result.append({
                     'id': bookmark.id,
@@ -104,7 +148,7 @@ class DatabaseHelper:
             
             result = []
             for bookmark in bookmarks:
-                metadata = bookmark.metadata or {}
+                metadata = bookmark.bookmark_metadata or {}
                 
                 result.append({
                     'id': bookmark.id,
@@ -152,7 +196,7 @@ class DatabaseHelper:
             
             result = []
             for bookmark in bookmarks:
-                metadata = bookmark.metadata or {}
+                metadata = bookmark.bookmark_metadata or {}
                 
                 result.append({
                     'id': bookmark.id,

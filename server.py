@@ -4,9 +4,14 @@ Flask server for KaraKeep HomeDash with SQLite cache
 Serves cached bookmark data for fast page loads
 """
 
+import sys
+import os
+
+# Add current directory to Python path for imports
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+
 from flask import Flask, request, jsonify, send_from_directory, Response
 import json
-import os
 import logging
 from database import DatabaseHelper
 
@@ -43,14 +48,22 @@ def ensure_config_exists():
     """Create default config.json if it doesn't exist"""
     config_path = 'config/config.json'
     
-    # Create config directory if it doesn't exist
-    os.makedirs('config', exist_ok=True)
-    
-    if not os.path.exists(config_path):
-        with open(config_path, 'w') as f:
-            json.dump(DEFAULT_CONFIG, f, indent=2)
-        logger.info(f"Created default config at {config_path}")
-        logger.warning("⚠️  Please edit config/config.json and add your KaraKeep API key!")
+    try:
+        # Create config directory if it doesn't exist
+        os.makedirs('config', exist_ok=True)
+        
+        if not os.path.exists(config_path):
+            with open(config_path, 'w') as f:
+                json.dump(DEFAULT_CONFIG, f, indent=2)
+            logger.info(f"Created default config at {config_path}")
+            logger.warning("⚠️  Please edit config/config.json and add your KaraKeep API key!")
+    except PermissionError:
+        logger.error("Permission denied: Cannot create config directory or file.")
+        logger.error("Please ensure the ./config directory is writable or mounted correctly.")
+        raise
+    except Exception as e:
+        logger.error(f"Error creating config: {e}")
+        raise
 
 def load_config():
     """Load configuration from file"""
@@ -149,6 +162,39 @@ def get_stats():
     except Exception as e:
         logger.error(f"Error fetching stats: {str(e)}")
         return jsonify({"error": str(e)}), 500
+
+# Version info
+@app.route('/version')
+def version_info():
+    """Get version information"""
+    return jsonify({
+        "version": "2.0.0",
+        "architecture": "cache-based",
+        "features": [
+            "SQLite cache",
+            "Background sync",
+            "Sub-second page loads"
+        ]
+    })
+
+# Health check endpoint
+@app.route('/health')
+def health_check():
+    """Simple health check endpoint"""
+    try:
+        # Check if database is accessible
+        stats = db_helper.get_stats()
+        return jsonify({
+            "status": "healthy",
+            "database": "connected",
+            "lists": stats.get('lists', 0),
+            "bookmarks": stats.get('bookmarks', 0)
+        })
+    except Exception as e:
+        return jsonify({
+            "status": "unhealthy",
+            "error": str(e)
+        }), 500
 
 # Save preferences
 @app.route('/api/preferences', methods=['POST'])

@@ -4,18 +4,25 @@ Background synchronization service for KaraKeep HomeDash
 Handles periodic syncing of bookmarks and lists from KaraKeep API to local SQLite cache
 """
 
-import json
+import sys
 import os
+
+# Add current directory to Python path for imports
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+
+import json
 import time
 import logging
 from datetime import datetime, timedelta
 import requests
 import urllib3
 from apscheduler.schedulers.blocking import BlockingScheduler
-from sqlalchemy import create_engine, Column, String, Text, DateTime, Integer, JSON, ForeignKey, Index
-from sqlalchemy.ext.declarative import declarative_base
-from sqlalchemy.orm import sessionmaker, relationship
+from sqlalchemy import create_engine
+from sqlalchemy.orm import sessionmaker
 from sqlalchemy.sql import func
+
+# Import models from database module
+from database import Base, List, Bookmark, SyncStatus
 
 # Disable SSL warnings for self-signed certificates
 urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
@@ -26,51 +33,6 @@ logging.basicConfig(
     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
 )
 logger = logging.getLogger(__name__)
-
-Base = declarative_base()
-
-# Database Models
-class List(Base):
-    __tablename__ = 'lists'
-    
-    id = Column(String, primary_key=True)
-    name = Column(String, nullable=False)
-    description = Column(Text, default='')
-    icon = Column(String, default='📁')
-    parent_id = Column(String, nullable=True)
-    position = Column(Integer, default=0)
-    last_synced = Column(DateTime, default=func.now())
-    
-    bookmarks = relationship("Bookmark", back_populates="list", cascade="all, delete-orphan")
-
-class Bookmark(Base):
-    __tablename__ = 'bookmarks'
-    
-    id = Column(String, primary_key=True)
-    list_id = Column(String, ForeignKey('lists.id'), nullable=False)
-    title = Column(String)
-    url = Column(Text)
-    description = Column(Text)
-    favicon = Column(Text)
-    metadata = Column(JSON)
-    modified_at = Column(DateTime)
-    last_synced = Column(DateTime, default=func.now())
-    
-    list = relationship("List", back_populates="bookmarks")
-    
-    __table_args__ = (
-        Index('idx_bookmarks_list_id', 'list_id'),
-        Index('idx_bookmarks_modified', 'modified_at'),
-    )
-
-class SyncStatus(Base):
-    __tablename__ = 'sync_status'
-    
-    id = Column(Integer, primary_key=True)
-    last_full_sync = Column(DateTime)
-    last_incremental_sync = Column(DateTime)
-    status = Column(String)
-    error_message = Column(Text)
 
 class KaraKeepSync:
     def __init__(self, config_path='config/config.json'):
@@ -83,10 +45,19 @@ class KaraKeepSync:
     def load_config(self):
         """Load configuration from file"""
         if not os.path.exists(self.config_path):
+            logger.error(f"Config file not found at {self.config_path}")
+            logger.error("Please ensure config.json exists and contains your API key")
             raise Exception(f"Config file not found at {self.config_path}")
             
-        with open(self.config_path, 'r') as f:
-            config = json.load(f)
+        try:
+            with open(self.config_path, 'r') as f:
+                config = json.load(f)
+        except PermissionError:
+            logger.error(f"Permission denied: Cannot read {self.config_path}")
+            raise
+        except json.JSONDecodeError as e:
+            logger.error(f"Invalid JSON in config file: {e}")
+            raise
             
         # Validate required fields
         if not config.get('karakeepUrl'):
@@ -125,7 +96,16 @@ class KaraKeepSync:
         
         # Create directory if it doesn't exist
         if db_dir and not os.path.exists(db_dir):
-            os.makedirs(db_dir, exist_ok=True)
+            try:
+                os.makedirs(db_dir, exist_ok=True)
+                logger.info(f"Created database directory: {db_dir}")
+            except PermissionError:
+                logger.error(f"Permission denied: Cannot create database directory {db_dir}")
+                logger.error("Please ensure the data directory is writable or mounted correctly")
+                raise
+            except Exception as e:
+                logger.error(f"Error creating database directory: {e}")
+                raise
             
         # Create engine with optimizations
         self.engine = create_engine(
@@ -276,7 +256,7 @@ class KaraKeepSync:
                     'url': content.get('url') or api_bookmark.get('url') or api_bookmark.get('sourceUrl', '#'),
                     'description': content.get('description') or api_bookmark.get('description') or metadata.get('description', ''),
                     'favicon': content.get('favicon') or api_bookmark.get('favicon') or metadata.get('favicon', ''),
-                    'metadata': {
+                    'bookmark_metadata': {
                         'link_title': content.get('title') or metadata.get('title', ''),
                         'original_data': api_bookmark
                     },

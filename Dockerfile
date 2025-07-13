@@ -21,6 +21,7 @@ COPY app.js .
 COPY server.py .
 COPY sync_service.py .
 COPY database.py .
+COPY test_startup.py .
 
 # Copy supervisor configuration
 COPY supervisord.conf /etc/supervisor/conf.d/supervisord.conf
