@@ -16,7 +16,6 @@ __pycache__/
 venv/
 env/
 .venv
-test_startup.py
 
 # IDE
 .vscode/
