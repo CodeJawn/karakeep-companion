@@ -1,5 +1,10 @@
 FROM python:3.9-slim
 
+# Install system dependencies
+RUN apt-get update && apt-get install -y \
+    supervisor \
+    && rm -rf /var/lib/apt/lists/*
+
 # Set working directory
 WORKDIR /app
 
@@ -14,12 +19,17 @@ COPY index.html .
 COPY styles.css .
 COPY app.js .
 COPY server.py .
+COPY sync_service.py .
+COPY database.py .
 
-# Create config directory
-RUN mkdir -p config
+# Copy supervisor configuration
+COPY supervisord.conf /etc/supervisor/conf.d/supervisord.conf
+
+# Create necessary directories
+RUN mkdir -p /app/config /app/data /app/logs
 
 # Expose port
 EXPOSE 8595
 
-# Run the Flask server
-CMD ["python", "server.py"]
+# Run supervisor to manage both processes
+CMD ["/usr/bin/supervisord", "-c", "/etc/supervisor/conf.d/supervisord.conf"]

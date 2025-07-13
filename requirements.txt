@@ -1,3 +1,15 @@
+# Core web framework
 flask==3.0.0
+
+# HTTP requests for API calls
 requests==2.31.0
 urllib3==2.1.0
+
+# Database ORM
+sqlalchemy==2.0.23
+
+# Background task scheduling
+apscheduler==3.10.4
+
+# Production WSGI server (optional, but recommended)
+gunicorn==21.2.0

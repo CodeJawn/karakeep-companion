@@ -1,5 +1,5 @@
 // KaraKeep HomeDash App
-// Main application logic with drag-and-drop support - API Version
+// Main application logic with drag-and-drop support - Cache Version
 
 // Global state
 let bookmarksData = [];
@@ -11,7 +11,8 @@ const NUM_COLUMNS = 4; // Define the number of columns
 async function init() {
     try {
         await loadConfig();
-        await loadBookmarksFromAPI();
+        await loadBookmarksFromCache();
+        setupSyncStatusMonitor();
     } catch (error) {
         console.error('Failed to initialize application:', error);
         showError('Failed to initialize application', error.message);
@@ -29,9 +30,6 @@ async function loadConfig() {
             if (!config.karakeepUrl) {
                 throw new Error('Missing karakeepUrl in config');
             }
-            if (!config.apiKey) {
-                throw new Error('Missing apiKey in config. Please add your KaraKeep API key to config.json');
-            }
             
             const karakeepLink = document.getElementById('karakeepLink');
             if (karakeepLink && config.karakeepUrl) {
@@ -43,7 +41,7 @@ async function loadConfig() {
                 config.preferences = { columnOrder: [], columnLayout: {} };
             }
             
-            console.log('Loaded config from server (using API proxy)');
+            console.log('Loaded config from server');
         } else {
             throw new Error('Could not load config.json');
         }
@@ -53,89 +51,34 @@ async function loadConfig() {
     }
 }
 
-// Make API request with authentication
-async function makeAPIRequest(endpoint) {
-    // Use local proxy to avoid CORS issues
-    const url = `/api/karakeep${endpoint}`;
-    const response = await fetch(url, {
-        method: 'GET',
-        headers: {
-            'Content-Type': 'application/json'
-        }
-    });
-    
-    if (!response.ok) {
-        if (response.status === 401) {
-            throw new Error('Invalid API key. Please check your config.json');
-        }
-        throw new Error(`API request failed: ${response.status} ${response.statusText}`);
-    }
-    
-    return await response.json();
-}
-
-// Load bookmarks from KaraKeep API
-async function loadBookmarksFromAPI() {
-    updateLoadingMessage('Loading lists...');
+// Load bookmarks from cache
+async function loadBookmarksFromCache() {
+    updateLoadingMessage('Loading bookmarks from cache...');
     
     try {
-        // Fetch all lists
-        const listsResponse = await makeAPIRequest('/lists');
-        console.log('Lists API response:', listsResponse);
-        const lists = listsResponse.lists || listsResponse || [];  // Handle both wrapped and unwrapped responses
-        
-        updateLoadingMessage('Loading bookmarks...');
-        
-        // Initialize empty bookmarks array
-        const allBookmarks = [];
-        
-        console.log(`Found ${lists.length} lists, fetching bookmarks for each...`);
-        
-        // Fetch bookmarks for each list
-        for (let i = 0; i < lists.length; i++) {
-            const list = lists[i];
-            updateLoadingMessage(`Loading bookmarks from list ${i + 1} of ${lists.length}...`);
-            
-            try {
-                const listBookmarksResponse = await makeAPIRequest(`/lists/${list.id}/bookmarks`);
-                console.log(`Bookmarks for list ${list.id} (${list.name}):`, listBookmarksResponse);
-                
-                // Handle different response formats
-                let listBookmarks = [];
-                if (Array.isArray(listBookmarksResponse)) {
-                    listBookmarks = listBookmarksResponse;
-                } else if (listBookmarksResponse.bookmarks) {
-                    listBookmarks = listBookmarksResponse.bookmarks;
-                } else if (listBookmarksResponse.data) {
-                    listBookmarks = listBookmarksResponse.data;
-                }
-                
-                // Check for pagination
-                if (listBookmarksResponse.nextCursor) {
-                    console.warn(`List ${list.name} has more bookmarks available (pagination not implemented)`);
-                }
-                
-                // Filter for link type bookmarks
-                const linkBookmarks = listBookmarks.filter(bookmark => 
-                    !bookmark.content || bookmark.content.type === 'link'
-                );
-                
-                // Add listId to each bookmark
-                linkBookmarks.forEach(bookmark => {
-                    bookmark.listId = list.id;
-                    allBookmarks.push(bookmark);
-                });
-                
-                console.log(`Found ${linkBookmarks.length} link bookmarks in list ${list.name}`);
-            } catch (error) {
-                console.log(`Could not fetch bookmarks for list ${list.id}:`, error);
-            }
+        // Fetch all lists from cache
+        const listsResponse = await fetch('/api/cache/lists');
+        if (!listsResponse.ok) {
+            throw new Error(`Failed to load lists: ${listsResponse.status} ${listsResponse.statusText}`);
         }
         
-        console.log(`Total bookmarks fetched: ${allBookmarks.length}`);
+        const listsData = await listsResponse.json();
+        const lists = listsData.lists || [];
+        
+        console.log(`Loaded ${lists.length} lists from cache`);
+        
+        // Fetch all bookmarks at once from cache
+        const bookmarksResponse = await fetch('/api/cache/bookmarks');
+        if (!bookmarksResponse.ok) {
+            throw new Error(`Failed to load bookmarks: ${bookmarksResponse.status} ${bookmarksResponse.statusText}`);
+        }
+        
+        const bookmarksDataResponse = await bookmarksResponse.json();
+        const allBookmarks = bookmarksDataResponse.bookmarks || [];
+        
+        console.log(`Loaded ${allBookmarks.length} bookmarks from cache`);
         
         updateLoadingMessage('Processing bookmarks...');
-        
         
         // Create a map of lists by ID
         const listsById = {};
@@ -218,9 +161,76 @@ async function loadBookmarksFromAPI() {
         }
         
         renderLists(rootLists);
+        
+        // Show sync status
+        updateSyncStatus();
+        
     } catch (error) {
         console.error('Error loading bookmarks:', error);
-        throw new Error(error.message || 'Failed to load bookmarks from API');
+        
+        // Check if database is empty (never synced)
+        if (error.message.includes('404')) {
+            showError(
+                'No bookmarks found', 
+                'The sync service is still fetching your bookmarks. This page will refresh automatically when ready.'
+            );
+            // Auto-refresh after 5 seconds
+            setTimeout(() => location.reload(), 5000);
+        } else {
+            throw new Error(error.message || 'Failed to load bookmarks from cache');
+        }
+    }
+}
+
+// Setup sync status monitoring
+function setupSyncStatusMonitor() {
+    // Update sync status immediately
+    updateSyncStatus();
+    
+    // Update every 30 seconds
+    setInterval(updateSyncStatus, 30000);
+}
+
+// Update sync status display
+async function updateSyncStatus() {
+    try {
+        const response = await fetch('/api/sync/status');
+        if (!response.ok) return;
+        
+        const status = await response.json();
+        
+        // Add sync status indicator to header if it doesn't exist
+        let syncIndicator = document.getElementById('syncStatus');
+        if (!syncIndicator) {
+            const header = document.querySelector('.header-top');
+            if (header) {
+                syncIndicator = document.createElement('div');
+                syncIndicator.id = 'syncStatus';
+                syncIndicator.className = 'sync-status';
+                header.appendChild(syncIndicator);
+            }
+        }
+        
+        if (syncIndicator) {
+            const statusClass = status.status === 'success' ? 'sync-success' : 
+                               status.status === 'error' ? 'sync-error' : 
+                               status.status === 'running' ? 'sync-running' : 'sync-idle';
+            
+            const lastSync = status.lastIncrementalSync ? 
+                new Date(status.lastIncrementalSync).toLocaleString() : 'Never';
+            
+            syncIndicator.className = `sync-status ${statusClass}`;
+            syncIndicator.innerHTML = `
+                <span class="sync-icon">🔄</span>
+                <span class="sync-text">Last sync: ${lastSync}</span>
+            `;
+            
+            if (status.error) {
+                syncIndicator.title = `Error: ${status.error}`;
+            }
+        }
+    } catch (error) {
+        console.error('Failed to fetch sync status:', error);
     }
 }
 
@@ -230,7 +240,7 @@ function hasBookmarksInChildren(list) {
     return list.children.some(child => hasBookmarksInChildren(child));
 }
 
-// MODIFIED: Renders a structured grid of columns instead of a single container
+// Renders a structured grid of columns instead of a single container
 function renderLists(lists) {
     const content = document.getElementById('content');
     
@@ -363,7 +373,7 @@ function renderBookmark(bookmark) {
     `;
 }
 
-// MODIFIED: Initializes SortableJS on each column and groups them
+// Initializes SortableJS on each column and groups them
 function setupSorting() {
     const columns = document.querySelectorAll('.grid-column');
     columns.forEach(column => {
@@ -386,7 +396,7 @@ function setupSorting() {
     });
 }
 
-// Save column order to localStorage
+// Save column order
 async function saveColumnOrder() {
     // Get current column layout
     const columnLayout = {};
@@ -411,11 +421,7 @@ async function saveColumnOrder() {
         config.preferences.columnOrder = order; // Keep for backward compatibility
     }
 
-    // Save to localStorage first as immediate backup
-    localStorage.setItem('karakeep-column-layout', JSON.stringify(columnLayout));
-    localStorage.setItem('karakeep-column-order', JSON.stringify(order));
-
-    // Try to save to server
+    // Save to server
     try {
         const response = await fetch('/api/preferences', { 
             method: 'POST', 
@@ -424,13 +430,14 @@ async function saveColumnOrder() {
         });
         
         if (response.ok) {
-            console.log('Preferences saved to server');
+            console.log('Preferences saved');
         } else {
-            console.log('Server save failed, but localStorage backup exists');
+            console.error('Failed to save preferences');
         }
     } catch (error) {
-        console.log('No server available, using localStorage only');
+        console.error('Error saving preferences:', error);
     }
+    
     console.log('Column layout saved:', columnLayout);
 }
 
@@ -533,42 +540,11 @@ function setupFaviconErrorHandling() {
     });
 }
 
-// Load saved preferences from localStorage on startup
-function loadSavedPreferences() {
-    // Try to load column layout first (new format)
-    const savedLayout = localStorage.getItem('karakeep-column-layout');
-    if (savedLayout) {
-        try {
-            const layout = JSON.parse(savedLayout);
-            if (typeof layout === 'object' && !Array.isArray(layout)) {
-                config.preferences.columnLayout = layout;
-                console.log('Loaded column layout from localStorage');
-                return; // Don't need to load old format
-            }
-        } catch (error) {
-            console.error('Error loading saved column layout:', error);
-        }
-    }
-    
-    // Fallback to old column order format
-    const savedOrder = localStorage.getItem('karakeep-column-order');
-    if (savedOrder) {
-        try {
-            const order = JSON.parse(savedOrder);
-            if (Array.isArray(order)) {
-                config.preferences.columnOrder = order;
-                console.log('Loaded column order from localStorage (legacy format)');
-            }
-        } catch (error) {
-            console.error('Error loading saved preferences:', error);
-        }
-    }
-}
-
 // Utility functions
 function escapeHtml(unsafe) {
     return unsafe.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;").replace(/'/g, "&#039;");
 }
+
 function debounce(func, wait) {
     let timeout;
     return function executedFunction(...args) {
@@ -577,13 +553,15 @@ function debounce(func, wait) {
         timeout = setTimeout(later, wait);
     };
 }
+
 function updateLoadingMessage(message) {
     const loadingElement = document.querySelector('.loading p');
     if (loadingElement) loadingElement.textContent = message;
 }
+
 function showError(title, message) {
     const content = document.getElementById('content');
-    content.innerHTML = `<div class="error"><h2>${escapeHtml(title)}</h2><p>${escapeHtml(message)}</p><small>Please check your config.json file and ensure your API key is valid.</small></div>`;
+    content.innerHTML = `<div class="error"><h2>${escapeHtml(title)}</h2><p>${escapeHtml(message)}</p><small>If this is your first time using KaraKeep HomeDash, please wait for the initial sync to complete.</small></div>`;
 }
 
 // Start the application when DOM is ready
